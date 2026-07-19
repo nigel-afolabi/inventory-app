@@ -39,6 +39,8 @@ security = HTTPBearer()
 SECRET_KEY = os.getenv("SECRET_KEY", "fallback-key-for-dev")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 480
+MANAGER_SEED_PASSWORD = os.getenv("MANAGER_SEED_PASSWORD", "sample-manager-password-123")
+ADMIN_SEED_PASSWORD = os.getenv("ADMIN_SEED_PASSWORD", "sample-admin-password-123")
 
 
 # --- Direct bcrypt helper functions ---
@@ -135,20 +137,20 @@ def init_db():
 
     cursor.execute("INSERT OR IGNORE INTO locations (id, name) VALUES (1, 'North Branch')")
 
-    default_hash = get_password_hash("securePassword123!")
+    default_hash = get_password_hash(MANAGER_SEED_PASSWORD)
     cursor.execute(
         """
         INSERT OR IGNORE INTO users (location_id, username, password_hash, role)
-        VALUES (1, 'manager_nigel', ?, 'manager')
+        VALUES (1, 'manager', ?, 'manager')
         """,
         (default_hash,),
     )
 
-    admin_hash = get_password_hash("Urb@nAdm1n#21")
+    admin_hash = get_password_hash(ADMIN_SEED_PASSWORD)
     cursor.execute(
         """
         INSERT OR IGNORE INTO users (username, password_hash, role)
-        VALUES ('business_owner', ?, 'admin')
+        VALUES ('admin', ?, 'admin')
         """,
         (admin_hash,),
     )

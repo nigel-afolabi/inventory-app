@@ -10,3 +10,12 @@ __pycache__/
 
 # Ignore the backups folder (so you don't upload gigabytes of backups)
 backups/
+
+# System files
+.DS_Store
+
+# Log files
+app_errors.log
+
+# Sample data
+test_sales.csv
