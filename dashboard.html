@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventory Dashboard | Location Secure</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 text-gray-900 font-sans h-screen flex flex-col">
+
+    <nav class="bg-black text-white px-6 py-4 flex justify-between items-center shadow-md">
+        <div class="flex items-center space-x-4">
+            <h1 class="text-xl font-bold tracking-widest uppercase">Inventory Matrix</h1>
+            <span id="location-badge" class="bg-gray-800 text-xs px-3 py-1 rounded font-semibold border border-gray-600">
+                Loading Location...
+            </span>
+        </div>
+        <button onclick="logout()" class="text-sm font-bold text-gray-300 hover:text-white uppercase transition">
+            Log Out
+        </button>
+    </nav>
+
+    <main class="flex-grow p-8 max-w-7xl mx-auto w-full">
+        
+        <div class="flex justify-between items-end mb-4">
+            <div>
+                <h2 class="text-2xl font-bold text-gray-800">Current Stock Levels</h2>
+                <p class="text-sm text-gray-500">Live view of physical inventory and supply velocity.</p>
+            </div>
+            
+            <div class="bg-white p-3 border-2 border-black rounded shadow-sm flex space-x-4 items-center">
+                <span class="text-sm font-bold uppercase text-gray-600">Power BI Sync:</span>
+                <input type="file" id="csvFileInput" accept=".csv" class="text-sm">
+                <button onclick="uploadCSV()" class="bg-black text-white text-sm font-bold py-1 px-4 rounded hover:bg-gray-800 transition">
+                    Upload Weekly CSV
+                </button>
+            </div>
+        </div>
+
+        <div id="upload-status" class="hidden mb-4 p-3 rounded font-bold text-sm border"></div>
+
+        <div class="bg-white border-2 border-black rounded shadow-sm overflow-hidden">
+            <table class="w-full text-left border-collapse">
+                <thead class="bg-gray-100 border-b-2 border-black">
+                    <tr>
+                        <th id="location-header" class="p-3 font-bold text-sm uppercase text-gray-600 border-r border-gray-300 hidden">Location</th>
+                        <th class="p-3 font-bold text-sm uppercase text-gray-600 border-r border-gray-300">SKU</th>
+                        <th class="p-3 font-bold text-sm uppercase text-gray-600 border-r border-gray-300">Product Name</th>
+                        <th class="p-3 font-bold text-sm uppercase text-gray-600 border-r border-gray-300">Current Stock</th>
+                        <th class="p-3 font-bold text-sm uppercase text-gray-600 border-r border-gray-300">Weeks of Supply</th>
+                        <th class="p-3 font-bold text-sm uppercase text-gray-600">Status</th>
+                    </tr>
+                </thead>
+                <tbody id="inventory-body" class="divide-y divide-gray-300">
+                    <!-- JavaScript will inject rows here -->
+                </tbody>
+            </table>
+        </div>
+    </main>
+
+    <script>
+        const token = localStorage.getItem('inventory_token');
+        const role = localStorage.getItem('role');
+
+        if (!token) {
+            window.location.href = 'index.html';
+        }
+
+        async function loadDashboard() {
+            try {
+                const response = await fetch('http://127.0.0.1:8000/inventory', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (response.status === 401) {
+                    logout();
+                    return;
+                }
+
+                const data = await response.json();
+                const tbody = document.getElementById('inventory-body');
+                const locationHeader = document.getElementById('location-header');
+
+                if (role === 'admin') {
+                    document.getElementById('location-badge').innerText = `GLOBAL ACCESS | Admin View`;
+                    document.getElementById('location-badge').className = "bg-red-800 text-xs px-3 py-1 rounded font-semibold border border-red-600";
+                    locationHeader.classList.remove('hidden');
+                } else {
+                    document.getElementById('location-badge').innerText = `Location ID: ${data.location} | User: ${data.manager}`;
+                    locationHeader.classList.add('hidden');
+                }
+
+                tbody.innerHTML = '';
+                let lastLocation = null;
+
+                data.inventory.forEach(item => {
+                    if (role === 'admin' && item.location_id !== lastLocation) {
+                        tbody.innerHTML += `
+                            <tr class="bg-gray-800 text-white">
+                                <td colspan="5" class="p-2 font-bold uppercase tracking-widest text-center">
+                                    Location ID: ${item.location_id}
+                                </td>
+                            </tr>
+                        `;
+                        lastLocation = item.location_id;
+                    }
+
+                    let statusColor = "bg-green-100 text-green-800 border-green-400";
+                    let statusText = "Healthy";
+                    let wosDisplay = item.weeks_of_supply;
+
+                    if (item.weeks_of_supply === "N/A") {
+                        statusColor = "bg-gray-100 text-gray-500 border-gray-300";
+                        statusText = "No Sales Data";
+                    } else if (item.weeks_of_supply < 2.0) {
+                        statusColor = "bg-red-100 text-red-800 border-red-400";
+                        statusText = "Reorder Now";
+                        wosDisplay = `${item.weeks_of_supply} wks`;
+                    } else if (item.weeks_of_supply > 8.0) {
+                        statusColor = "bg-yellow-100 text-yellow-800 border-yellow-400";
+                        statusText = "Overstock Warning";
+                        wosDisplay = `${item.weeks_of_supply} wks`;
+                    } else {
+                        statusColor = "bg-green-100 text-green-800 border-green-400";
+                        statusText = "Healthy";
+                        wosDisplay = `${item.weeks_of_supply} wks`;
+                    }
+
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-gray-50 transition border-b border-gray-200">
+                            <td class="p-3 font-mono text-sm border-r border-gray-300">${item.sku}</td>
+                            <td class="p-3 font-medium text-gray-800 border-r border-gray-300">${item.name}</td>
+                            <td class="p-3 font-mono font-bold text-lg border-r border-gray-300">${item.current_stock}</td>
+                            <td class="p-3 font-mono font-bold text-md border-r border-gray-300">${wosDisplay}</td>
+                            <td class="p-3">
+                                <span class="px-2 py-1 text-xs font-bold rounded border ${statusColor}">
+                                    ${statusText}
+                                </span>
+                            </td>
+                        </tr>
+                    `;
+                });
+
+            } catch (err) {
+                console.error("Failed to load inventory", err);
+            }
+        }
+
+        async function uploadCSV() {
+            const fileInput = document.getElementById('csvFileInput');
+            const file = fileInput.files[0];
+            const statusBox = document.getElementById('upload-status');
+
+            if (!file) {
+                statusBox.textContent = "Please select a CSV file first.";
+                statusBox.className = "mb-4 p-3 rounded font-bold text-sm border bg-red-100 text-red-800 border-red-400";
+                statusBox.classList.remove('hidden');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append("file", file);
+
+            statusBox.textContent = "Uploading...";
+            statusBox.className = "mb-4 p-3 rounded font-bold text-sm border bg-blue-100 text-blue-800 border-blue-400";
+            statusBox.classList.remove('hidden');
+
+            try {
+                const response = await fetch('http://127.0.0.1:8000/upload-sales', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: formData
+                });
+
+                if (response.ok) {
+                    statusBox.textContent = "Sync successful. Inventory and supply metrics updated.";
+                    statusBox.className = "mb-4 p-3 rounded font-bold text-sm border bg-green-100 text-green-800 border-green-400";
+                    fileInput.value = "";
+
+                    loadDashboard();
+                } else {
+                    const errData = await response.json();
+                    statusBox.textContent = `Upload failed: ${errData.detail || 'Unknown error'}`;
+                    statusBox.className = "mb-4 p-3 rounded font-bold text-sm border bg-red-100 text-red-800 border-red-400";
+                }
+            } catch (err) {
+                console.error("Upload error", err);
+                statusBox.textContent = "Server connection failed.";
+                statusBox.className = "mb-4 p-3 rounded font-bold text-sm border bg-red-100 text-red-800 border-red-400";
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('inventory_token');
+            localStorage.removeItem('location_id');
+            localStorage.removeItem('role');
+            window.location.href = 'index.html';
+        }
+
+        loadDashboard();
+    </script>
+</body>
+</html>

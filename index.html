@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Corporate Login | Inventory</title>
+    <!-- Tailwind CSS for sharp, professional styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 h-screen flex items-center justify-center font-sans">
+
+    <!-- Login Card -->
+    <div class="bg-white p-8 rounded shadow-md w-full max-w-sm border-t-4 border-black">
+        <h2 class="text-2xl font-bold mb-6 text-gray-800 tracking-tight">System Login</h2>
+        
+        <form id="loginForm" class="space-y-4">
+            <div>
+                <label class="block text-sm font-semibold text-gray-600 uppercase">Username</label>
+                <input type="text" id="username" class="w-full mt-1 p-2 border border-gray-300 rounded focus:outline-none focus:border-black focus:ring-1 focus:ring-black" required>
+            </div>
+            
+            <div>
+                <label class="block text-sm font-semibold text-gray-600 uppercase">Password</label>
+                <input type="password" id="password" class="w-full mt-1 p-2 border border-gray-300 rounded focus:outline-none focus:border-black focus:ring-1 focus:ring-black" required>
+            </div>
+
+            <!-- Error Message Box (Hidden by default) -->
+            <div id="error-msg" class="hidden bg-red-100 text-red-700 p-2 rounded text-sm font-semibold">
+                Invalid credentials.
+            </div>
+
+            <button type="submit" class="w-full bg-black text-white font-bold py-2 px-4 rounded hover:bg-gray-800 transition duration-150">
+                ACCESS SYSTEM
+            </button>
+        </form>
+    </div>
+
+    <!-- The JavaScript to handle the login logic -->
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault(); // Stop page from refreshing
+            
+            const user = document.getElementById('username').value;
+            const pass = document.getElementById('password').value;
+            const errorBox = document.getElementById('error-msg');
+
+            try {
+                // Send credentials to your Python server
+                const response = await fetch('http://127.0.0.1:8000/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: user, password: pass })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    // Save the secure token to the browser's local memory
+                    localStorage.setItem('inventory_token', data.access_token);
+                    localStorage.setItem('location_id', data.location_id);
+                    localStorage.setItem('role', data.role);
+                    
+                    // Send them to the spreadsheet dashboard
+                    window.location.href = 'dashboard.html'; 
+                } else {
+                    // Show error if password is wrong
+                    errorBox.classList.remove('hidden');
+                }
+            } catch (err) {
+                console.error("Server connection failed", err);
+                errorBox.textContent = "Cannot connect to server.";
+                errorBox.classList.remove('hidden');
+            }
+        });
+    </script>
+</body>
+</html>
