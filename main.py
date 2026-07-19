@@ -70,9 +70,14 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
         raise HTTPException(status_code=401, detail="Invalid token.")
 
 
+# This looks for an environment variable called 'DB_PATH'.
+# If it's not there (like when you run it locally), it defaults to 'inventory.db'.
+db_path = os.getenv("DB_PATH", "inventory.db")
+
+
 # --- SQLite helper ---
 def get_connection():
-    return sqlite3.connect("inventory.db")
+    return sqlite3.connect(db_path)
 
 
 # --- Database Initialization (Local Workbench) ---

@@ -39,6 +39,11 @@
 
         <div id="upload-status" class="hidden mb-4 p-3 rounded font-bold text-sm border"></div>
 
+        <div id="loading-spinner" class="hidden text-center py-10">
+            <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-black mx-auto"></div>
+            <p class="mt-2 text-sm font-bold text-gray-500 uppercase tracking-widest">Loading Inventory...</p>
+        </div>
+
         <div class="bg-white border-2 border-black rounded shadow-sm overflow-hidden">
             <table class="w-full text-left border-collapse">
                 <thead class="bg-gray-100 border-b-2 border-black">
@@ -52,6 +57,9 @@
                     </tr>
                 </thead>
                 <tbody id="inventory-body" class="divide-y divide-gray-300">
+                    <tr id="empty-state" class="hidden">
+                        <td colspan="5" class="p-10 text-center text-gray-500 font-bold">No inventory items found.</td>
+                    </tr>
                     <!-- JavaScript will inject rows here -->
                 </tbody>
             </table>
@@ -67,6 +75,10 @@
         }
 
         async function loadDashboard() {
+            document.getElementById('loading-spinner').classList.remove('hidden');
+            document.getElementById('inventory-body').classList.add('hidden');
+            document.getElementById('empty-state').classList.add('hidden');
+
             try {
                 const response = await fetch('http://127.0.0.1:8000/inventory', {
                     headers: { 'Authorization': `Bearer ${token}` }
@@ -81,6 +93,9 @@
                 const tbody = document.getElementById('inventory-body');
                 const locationHeader = document.getElementById('location-header');
 
+                document.getElementById('loading-spinner').classList.add('hidden');
+                tbody.classList.remove('hidden');
+
                 if (role === 'admin') {
                     document.getElementById('location-badge').innerText = `GLOBAL ACCESS | Admin View`;
                     document.getElementById('location-badge').className = "bg-red-800 text-xs px-3 py-1 rounded font-semibold border border-red-600";
@@ -88,6 +103,11 @@
                 } else {
                     document.getElementById('location-badge').innerText = `Location ID: ${data.location} | User: ${data.manager}`;
                     locationHeader.classList.add('hidden');
+                }
+
+                if (data.inventory.length === 0) {
+                    document.getElementById('empty-state').classList.remove('hidden');
+                    return;
                 }
 
                 tbody.innerHTML = '';
@@ -142,6 +162,7 @@
                 });
 
             } catch (err) {
+                document.getElementById('loading-spinner').classList.add('hidden');
                 console.error("Failed to load inventory", err);
             }
         }

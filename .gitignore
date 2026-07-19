@@ -1,0 +1,12 @@
+# Ignore environment variables and secrets
+.env
+
+# Ignore local database files
+inventory.db
+
+# Ignore Python cache files
+__pycache__/
+*.pyc
+
+# Ignore the backups folder (so you don't upload gigabytes of backups)
+backups/
