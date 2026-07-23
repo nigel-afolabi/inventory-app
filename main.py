@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Depends, UploadFile, File
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import sqlite3
 import bcrypt
@@ -309,3 +310,19 @@ async def upload_power_bi(
     conn.close()
     
     return {"status": "success", "message": "Sales data synced and inventory updated."}
+
+
+# --- Serve Frontend HTML ---
+@app.get("/")
+async def serve_index():
+    return FileResponse(os.path.join(os.path.dirname(__file__), "index.html"))
+
+
+@app.get("/dashboard")
+async def serve_dashboard():
+    return FileResponse(os.path.join(os.path.dirname(__file__), "dashboard.html"))
+
+
+@app.get("/dashboard.html")
+async def serve_dashboard_html():
+    return FileResponse(os.path.join(os.path.dirname(__file__), "dashboard.html"))
