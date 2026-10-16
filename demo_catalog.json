@@ -1,0 +1,40 @@
+{
+  "albums": [
+    {
+      "title": "Midnight Echoes",
+      "artist": "Nova Harbor",
+      "release_year": 2024,
+      "genre": ["Indie Pop", "Synthwave"],
+      "cover_art": "/static/demo/cover-midnight.jpg",
+      "review_summary": "An atmospheric set of melodic hooks and shimmering synth textures.",
+      "review_text": "Nova Harbor delivers a confident, polished record that balances nostalgia with modern production. The album earns its emotional weight through patient pacing, thoughtful vocal phrasing, and a memorable chorus on nearly every track. It feels like a late-night drive through a city that never quite sleeps."
+    },
+    {
+      "title": "Copper Horizon",
+      "artist": "The Lanterns",
+      "release_year": 2021,
+      "genre": ["Folk Rock", "Americana"],
+      "cover_art": "/static/demo/cover-copper.jpg",
+      "review_summary": "Warm, reflective songwriting with cinematic countryside textures.",
+      "review_text": "The Lanterns lean into acoustic warmth and open-road storytelling with a measured confidence. The lyrics feel lived-in and grounded, while the arrangements grow with quiet drama instead of overwhelming the songs. It is a record that rewards repeated listens and rewards the listener with emotional detail."
+    },
+    {
+      "title": "Neon Orchard",
+      "artist": "Harbor Bloom",
+      "release_year": 2023,
+      "genre": ["Dream Pop", "Electronic"],
+      "cover_art": "/static/demo/cover-neon.jpg",
+      "review_summary": "Dreamy and immediate, with layered vocals and luminous synth layers.",
+      "review_text": "Harbor Bloom’s third release feels both intimate and expansive, moving between airy melodies and more kinetic electronic passages. The album’s power is not just in its hooks but in how it uses space and tone to make each chorus feel earned. It sounds like a perfect soundtrack for dusk and reflection."
+    },
+    {
+      "title": "Signal in the Dust",
+      "artist": "Cinder Vale",
+      "release_year": 2022,
+      "genre": ["Alternative Rock", "Post-Punk"],
+      "cover_art": "/static/demo/cover-signal.jpg",
+      "review_summary": "Driven guitars and sharp lyrics anchor a restless, modern record.",
+      "review_text": "Cinder Vale brings tension and motion to every song without sacrificing clarity. The guitars feel tactile and dirty, while the bass and drums push the record forward with a sense of urgency. This is a strong, focused collection that balances punch with atmosphere and never loses its edge."
+    }
+  ]
+}

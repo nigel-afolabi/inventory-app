@@ -3,75 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Corporate Login | Inventory</title>
-    <!-- Tailwind CSS for sharp, professional styling -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Inventory Login | Local ERP</title>
+    <link rel="stylesheet" href="/static/styles.css">
 </head>
-<body class="bg-gray-100 h-screen flex items-center justify-center font-sans">
-
-    <!-- Login Card -->
-    <div class="bg-white p-8 rounded shadow-md w-full max-w-sm border-t-4 border-black">
-        <h2 class="text-2xl font-bold mb-6 text-gray-800 tracking-tight">System Login</h2>
-        
-        <form id="loginForm" class="space-y-4">
-            <div>
-                <label class="block text-sm font-semibold text-gray-600 uppercase">Username</label>
-                <input type="text" id="username" class="w-full mt-1 p-2 border border-gray-300 rounded focus:outline-none focus:border-black focus:ring-1 focus:ring-black" required>
-            </div>
-            
-            <div>
-                <label class="block text-sm font-semibold text-gray-600 uppercase">Password</label>
-                <input type="password" id="password" class="w-full mt-1 p-2 border border-gray-300 rounded focus:outline-none focus:border-black focus:ring-1 focus:ring-black" required>
+<body data-page="login">
+    <div class="auth-shell">
+        <div class="auth-card">
+            <div class="auth-header">
+                <span class="brand-mark">INV</span>
+                <div>
+                    <p class="eyebrow">Secure Access</p>
+                    <h1>System Login</h1>
+                </div>
             </div>
 
-            <!-- Error Message Box (Hidden by default) -->
-            <div id="error-msg" class="hidden bg-red-100 text-red-700 p-2 rounded text-sm font-semibold">
-                Invalid credentials.
-            </div>
+            <form id="loginForm">
+                <label for="username">Username</label>
+                <input type="text" id="username" autocomplete="username" required>
 
-            <button type="submit" class="w-full bg-black text-white font-bold py-2 px-4 rounded hover:bg-gray-800 transition duration-150">
-                ACCESS SYSTEM
-            </button>
-        </form>
+                <label for="password">Password</label>
+                <input type="password" id="password" autocomplete="current-password" required>
+
+                <div id="error-msg" class="error-box hidden">Invalid credentials.</div>
+
+                <button type="submit" class="primary-button auth-submit">Access System</button>
+            </form>
+        </div>
     </div>
 
-    <!-- The JavaScript to handle the login logic -->
-    <script>
-        document.getElementById('loginForm').addEventListener('submit', async function(e) {
-            e.preventDefault(); // Stop page from refreshing
-            
-            const user = document.getElementById('username').value;
-            const pass = document.getElementById('password').value;
-            const errorBox = document.getElementById('error-msg');
-
-            try {
-                // Send credentials to your Python server
-                const response = await fetch('/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username: user, password: pass })
-                });
-
-                if (response.ok) {
-                    const data = await response.json();
-                    
-                    // Save the secure token to the browser's local memory
-                    localStorage.setItem('inventory_token', data.access_token);
-                    localStorage.setItem('location_id', data.location_id);
-                    localStorage.setItem('role', data.role);
-                    
-                    // Send them to the spreadsheet dashboard
-                    window.location.href = '/dashboard'; 
-                } else {
-                    // Show error if password is wrong
-                    errorBox.classList.remove('hidden');
-                }
-            } catch (err) {
-                console.error("Server connection failed", err);
-                errorBox.textContent = "Cannot connect to server.";
-                errorBox.classList.remove('hidden');
-            }
-        });
-    </script>
+    <script src="/static/app.js" defer></script>
 </body>
 </html>
