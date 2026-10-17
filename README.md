@@ -36,6 +36,7 @@ Important:
 - `SECRET_KEY` should be a long random value.
 - Passwords are stored as bcrypt hashes in SQLite, not plain text.
 - The app reads the official values from `.env` when it starts.
+- The public demo uses `DEMO_DB_PATH` so upload tests do not affect the live store database.
 
 ## Local startup
 1. Install dependencies:
@@ -56,7 +57,7 @@ Important:
 - `manager` can only see and manage Location 1 records.
 - `manager2` can only see and manage Location 2 records.
 - `admin` can view both locations in the main inventory view.
-- A guest user can view the demo catalog but cannot write to the ledger.
+- Guest user can view the demo catalog and upload sample files to a separate demo database without affecting the live store inventory.
 
 ## Data isolation rules
 The app stores each ledger snapshot and related record with a `location_id`. This prevents overlap between branches and keeps a manager from viewing another branch’s ledger during a later login.

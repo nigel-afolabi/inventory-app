@@ -17,6 +17,11 @@ import csv
 import io
 import openpyxl
 
+try:
+    import psycopg2
+except ImportError:  # pragma: no cover
+    psycopg2 = None
+
 # Configure logging
 logging.basicConfig(
     filename="app_errors.log",
@@ -55,6 +60,11 @@ if len(SECRET_KEY.encode("utf-8")) < 32:
     raise RuntimeError("SECRET_KEY must be at least 32 characters long for secure JWT signing.")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 480
+LOCATION_1_NAME = os.getenv("LOCATION_1_NAME", "Port Saint Lucie")
+LOCATION_2_NAME = os.getenv("LOCATION_2_NAME", "Daytona Beach")
+MANAGER_USERNAME = os.getenv("MANAGER_USERNAME", "manager")
+MANAGER2_USERNAME = os.getenv("MANAGER2_USERNAME", "manager2")
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin_oversight")
 MANAGER_SEED_PASSWORD = os.getenv("MANAGER_SEED_PASSWORD", "sample-manager-password-123")
 MANAGER2_SEED_PASSWORD = os.getenv("MANAGER2_SEED_PASSWORD", "sample-manager-password-123")
 ADMIN_SEED_PASSWORD = os.getenv("ADMIN_SEED_PASSWORD", "sample-admin-password-123")
@@ -99,12 +109,33 @@ def verify_token(credentials: HTTPAuthorizationCredentials | None = Depends(secu
 
 # This looks for an environment variable called 'DB_PATH'.
 # If it's not there (like when you run it locally), it defaults to 'inventory.db'.
+DATABASE_URL = os.getenv("DATABASE_URL")
 db_path = os.getenv("DB_PATH", "inventory.db")
+DEMO_DB_PATH = os.getenv("DEMO_DB_PATH", "demo_inventory.db")
 DEMO_CATALOG_PATH = os.path.join(os.path.dirname(__file__), "demo_catalog.json")
 
 
-# --- SQLite helper ---
-def get_connection():
+def uses_postgres() -> bool:
+    if not DATABASE_URL or not DATABASE_URL.strip():
+        return False
+    cleaned = DATABASE_URL.strip()
+    placeholder_markers = (
+        "your-password",
+        "your-project-ref",
+        "db.your-project-ref.supabase.co",
+        "postgresql://postgres:your-password@",
+    )
+    return not any(marker in cleaned for marker in placeholder_markers)
+
+
+# --- Database helpers ---
+def get_connection(db_override: str | None = None):
+    if db_override is not None:
+        return sqlite3.connect(db_override)
+    if uses_postgres():
+        if psycopg2 is None:
+            raise RuntimeError("psycopg2 is required when DATABASE_URL is configured.")
+        return psycopg2.connect(DATABASE_URL, sslmode="require")
     return sqlite3.connect(db_path)
 
 
@@ -123,55 +154,251 @@ def load_demo_catalog():
 def init_db():
     conn = get_connection()
     cursor = conn.cursor()
+    is_pg = uses_postgres()
 
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS locations (
-            id INTEGER PRIMARY KEY,
-            name TEXT
+    if is_pg:
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS locations (
+                id INTEGER PRIMARY KEY,
+                name TEXT
+            )
+            """
         )
-        """
-    )
 
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            location_id INTEGER,
-            username TEXT UNIQUE,
-            password_hash TEXT,
-            role TEXT,
-            FOREIGN KEY(location_id) REFERENCES locations(id)
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                location_id INTEGER,
+                username TEXT UNIQUE,
+                password_hash TEXT,
+                role TEXT,
+                FOREIGN KEY(location_id) REFERENCES locations(id)
+            )
+            """
         )
-        """
-    )
 
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS products (
-            sku TEXT,
-            location_id INTEGER,
-            name TEXT,
-            current_stock INTEGER DEFAULT 0,
-            PRIMARY KEY (sku, location_id),
-            FOREIGN KEY(location_id) REFERENCES locations(id)
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS products (
+                sku TEXT,
+                location_id INTEGER,
+                name TEXT,
+                current_stock INTEGER DEFAULT 0,
+                PRIMARY KEY (sku, location_id),
+                FOREIGN KEY(location_id) REFERENCES locations(id)
+            )
+            """
         )
-        """
-    )
 
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS weekly_sales (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            sku TEXT,
-            location_id INTEGER,
-            week_date TEXT,
-            units_sold INTEGER,
-            FOREIGN KEY(sku, location_id) REFERENCES products(sku, location_id)
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS weekly_sales (
+                id SERIAL PRIMARY KEY,
+                sku TEXT,
+                location_id INTEGER,
+                week_date TEXT,
+                units_sold INTEGER,
+                FOREIGN KEY(sku, location_id) REFERENCES products(sku, location_id)
+            )
+            """
         )
-        """
-    )
 
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS ledger_snapshots (
+                id SERIAL PRIMARY KEY,
+                location_id INTEGER,
+                item TEXT,
+                unit TEXT,
+                par REAL DEFAULT 0,
+                current_inv REAL DEFAULT 0,
+                sales_proj REAL DEFAULT 0,
+                order_needed REAL DEFAULT 0,
+                previous_current_inv REAL DEFAULT 0,
+                expected_ending_inv REAL DEFAULT 0,
+                actual_discrepancy REAL DEFAULT 0,
+                received_shipments REAL DEFAULT 0,
+                audit_flag TEXT,
+                audit_message TEXT,
+                uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+    else:
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS locations (
+                id INTEGER PRIMARY KEY,
+                name TEXT
+            )
+            """
+        )
+
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                location_id INTEGER,
+                username TEXT UNIQUE,
+                password_hash TEXT,
+                role TEXT,
+                FOREIGN KEY(location_id) REFERENCES locations(id)
+            )
+            """
+        )
+
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS products (
+                sku TEXT,
+                location_id INTEGER,
+                name TEXT,
+                current_stock INTEGER DEFAULT 0,
+                PRIMARY KEY (sku, location_id),
+                FOREIGN KEY(location_id) REFERENCES locations(id)
+            )
+            """
+        )
+
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS weekly_sales (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sku TEXT,
+                location_id INTEGER,
+                week_date TEXT,
+                units_sold INTEGER,
+                FOREIGN KEY(sku, location_id) REFERENCES products(sku, location_id)
+            )
+            """
+        )
+
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS ledger_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                location_id INTEGER,
+                item TEXT,
+                unit TEXT,
+                par REAL DEFAULT 0,
+                current_inv REAL DEFAULT 0,
+                sales_proj REAL DEFAULT 0,
+                order_needed REAL DEFAULT 0,
+                previous_current_inv REAL DEFAULT 0,
+                expected_ending_inv REAL DEFAULT 0,
+                actual_discrepancy REAL DEFAULT 0,
+                received_shipments REAL DEFAULT 0,
+                audit_flag TEXT,
+                audit_message TEXT,
+                uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+    if is_pg:
+        cursor.execute(
+            """
+            INSERT INTO locations (id, name) VALUES (1, %s), (2, %s)
+            ON CONFLICT (id) DO NOTHING
+            """,
+            (LOCATION_1_NAME, LOCATION_2_NAME),
+        )
+        default_hash = get_password_hash(MANAGER_SEED_PASSWORD)
+        cursor.execute(
+            """
+            INSERT INTO users (location_id, username, password_hash, role)
+            VALUES (1, %s, %s, 'manager')
+            ON CONFLICT (username) DO NOTHING
+            """,
+            (MANAGER_USERNAME, default_hash),
+        )
+        secondary_hash = get_password_hash(MANAGER2_SEED_PASSWORD)
+        cursor.execute(
+            """
+            INSERT INTO users (location_id, username, password_hash, role)
+            VALUES (2, %s, %s, 'manager')
+            ON CONFLICT (username) DO NOTHING
+            """,
+            (MANAGER2_USERNAME, secondary_hash),
+        )
+        admin_hash = get_password_hash(ADMIN_SEED_PASSWORD)
+        cursor.execute(
+            """
+            INSERT INTO users (username, password_hash, role)
+            VALUES (%s, %s, 'admin')
+            ON CONFLICT (username) DO NOTHING
+            """,
+            (ADMIN_USERNAME, admin_hash),
+        )
+        cursor.execute(
+            """
+            INSERT INTO products (sku, location_id, name, current_stock)
+            VALUES ('SKU-100', 1, 'Heavy Duty Zip Hoodie', 45),
+                   ('SKU-101', 1, 'Tactical Cargo Pants', 12),
+                   ('SKU-200', 2, 'Urban Air Socks', 66),
+                   ('SKU-201', 2, 'Premium Lettuce Pack', 22)
+            ON CONFLICT (sku, location_id) DO NOTHING
+            """
+        )
+    else:
+        cursor.execute(
+            """
+            INSERT OR IGNORE INTO locations (id, name) VALUES
+            (1, ?),
+            (2, ?)
+            """,
+            (LOCATION_1_NAME, LOCATION_2_NAME),
+        )
+
+        default_hash = get_password_hash(MANAGER_SEED_PASSWORD)
+        cursor.execute(
+            """
+            INSERT OR IGNORE INTO users (location_id, username, password_hash, role)
+            VALUES (1, ?, ?, 'manager')
+            """,
+            (MANAGER_USERNAME, default_hash,),
+        )
+
+        secondary_hash = get_password_hash(MANAGER2_SEED_PASSWORD)
+        cursor.execute(
+            """
+            INSERT OR IGNORE INTO users (location_id, username, password_hash, role)
+            VALUES (2, ?, ?, 'manager')
+            """,
+            (MANAGER2_USERNAME, secondary_hash,),
+        )
+
+        admin_hash = get_password_hash(ADMIN_SEED_PASSWORD)
+        cursor.execute(
+            """
+            INSERT OR IGNORE INTO users (username, password_hash, role)
+            VALUES (?, ?, 'admin')
+            """,
+            (ADMIN_USERNAME, admin_hash,),
+        )
+
+        cursor.execute(
+            """
+            INSERT OR IGNORE INTO products (sku, location_id, name, current_stock)
+            VALUES 
+            ('SKU-100', 1, 'Heavy Duty Zip Hoodie', 45),
+            ('SKU-101', 1, 'Tactical Cargo Pants', 12),
+            ('SKU-200', 2, 'Urban Air Socks', 66),
+            ('SKU-201', 2, 'Premium Lettuce Pack', 22)
+            """
+        )
+
+    conn.commit()
+    conn.close()
+
+init_db()
+
+
+def init_demo_db():
+    conn = get_connection(DEMO_DB_PATH)
+    cursor = conn.cursor()
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS ledger_snapshots (
@@ -193,64 +420,18 @@ def init_db():
         )
         """
     )
-
-    cursor.execute(
-        """
-        INSERT OR IGNORE INTO locations (id, name) VALUES
-        (1, 'North Branch'),
-        (2, 'South Branch')
-        """
-    )
-
-    default_hash = get_password_hash(MANAGER_SEED_PASSWORD)
-    cursor.execute(
-        """
-        INSERT OR IGNORE INTO users (location_id, username, password_hash, role)
-        VALUES (1, 'manager', ?, 'manager')
-        """,
-        (default_hash,),
-    )
-
-    secondary_hash = get_password_hash(MANAGER2_SEED_PASSWORD)
-    cursor.execute(
-        """
-        INSERT OR IGNORE INTO users (location_id, username, password_hash, role)
-        VALUES (2, 'manager2', ?, 'manager')
-        """,
-        (secondary_hash,),
-    )
-
-    admin_hash = get_password_hash(ADMIN_SEED_PASSWORD)
-    cursor.execute(
-        """
-        INSERT OR IGNORE INTO users (username, password_hash, role)
-        VALUES ('admin', ?, 'admin')
-        """,
-        (admin_hash,),
-    )
-
-    cursor.execute(
-        """
-        INSERT OR IGNORE INTO products (sku, location_id, name, current_stock)
-        VALUES 
-        ('SKU-100', 1, 'Heavy Duty Zip Hoodie', 45),
-        ('SKU-101', 1, 'Tactical Cargo Pants', 12),
-        ('SKU-200', 2, 'Urban Air Socks', 66),
-        ('SKU-201', 2, 'Premium Lettuce Pack', 22)
-        """
-    )
-
     conn.commit()
     conn.close()
 
-init_db()
+
+init_demo_db()
 
 
-def _get_previous_ledger_map(location_id: int | None):
+def _get_previous_ledger_map(location_id: int | None, db_override: str | None = None):
     if location_id is None:
         return {}
 
-    conn = get_connection()
+    conn = get_connection(db_override)
     cursor = conn.cursor()
     cursor.execute(
         """
@@ -323,12 +504,12 @@ def _compute_audit_reconciliation(item_row: dict, previous_row: dict | None):
     }
 
 
-def _persist_ledger_rows(location_id: int | None, ledger_rows: list[dict]):
+def _persist_ledger_rows(location_id: int | None, ledger_rows: list[dict], db_override: str | None = None):
     if location_id is None:
         return ledger_rows
 
-    previous_state = _get_previous_ledger_map(location_id)
-    conn = get_connection()
+    previous_state = _get_previous_ledger_map(location_id, db_override)
+    conn = get_connection(db_override)
     cursor = conn.cursor()
 
     for item_row in ledger_rows:
@@ -499,7 +680,7 @@ def _to_float(value):
         raise ValueError(f"Invalid numeric value: {value}") from exc
 
 
-async def _process_ledger_upload(file: UploadFile, location_id: int | None):
+async def _process_ledger_upload(file: UploadFile, location_id: int | None, db_override: str | None = None):
     filename = (file.filename or "").lower()
 
     if not filename.endswith((".csv", ".xlsx", ".xls")):
@@ -582,7 +763,7 @@ async def _process_ledger_upload(file: UploadFile, location_id: int | None):
         if not ledger_rows:
             raise HTTPException(status_code=400, detail="No active inventory rows were found in the uploaded ledger.")
 
-        reconciled_rows = _persist_ledger_rows(location_id, ledger_rows)
+        reconciled_rows = _persist_ledger_rows(location_id, ledger_rows, db_override)
 
         total_previous_inv = sum(_to_float(row.get("previous_current_inv")) for row in reconciled_rows)
         total_current_inv = sum(_to_float(row.get("current_inv")) for row in reconciled_rows)
@@ -615,9 +796,13 @@ async def upload_ledger(
     file: UploadFile = File(...),
     token_payload: dict = Depends(verify_token),
 ):
-    if token_payload.get("role") == "Guest Viewer":
-        raise HTTPException(status_code=403, detail="Demo Mode: Writing disabled for guest preview.")
-    return await _process_ledger_upload(file, token_payload.get("location_id"))
+    role = token_payload.get("role")
+    location_id = token_payload.get("location_id")
+
+    if role == "Guest Viewer":
+        return await _process_ledger_upload(file, location_id, db_override=DEMO_DB_PATH)
+
+    return await _process_ledger_upload(file, location_id)
 
 
 @app.post("/upload-sales")
@@ -625,9 +810,13 @@ async def upload_spreadsheet(
     file: UploadFile = File(...),
     token_payload: dict = Depends(verify_token),
 ):
-    if token_payload.get("role") == "Guest Viewer":
-        raise HTTPException(status_code=403, detail="Demo Mode: Writing disabled for guest preview.")
-    return await _process_ledger_upload(file, token_payload.get("location_id"))
+    role = token_payload.get("role")
+    location_id = token_payload.get("location_id")
+
+    if role == "Guest Viewer":
+        return await _process_ledger_upload(file, location_id, db_override=DEMO_DB_PATH)
+
+    return await _process_ledger_upload(file, location_id)
 
 
 @app.get("/api/demo-catalog")
