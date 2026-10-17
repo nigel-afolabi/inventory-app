@@ -365,6 +365,49 @@ function renderDemoCatalog(items) {
     searchInventory();
 }
 
+async function loadAuthenticatedInventory() {
+    const token = localStorage.getItem('inventory_token');
+    if (!token) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/inventory', {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(result.detail || 'Failed to load inventory');
+        }
+
+        const items = Array.isArray(result.inventory) ? result.inventory : [];
+        const transformed = items.map((item) => {
+            const currentInv = Number(item.current_stock || 0);
+            const salesProj = Number(item.weeks_of_supply || 0) * 4;
+            return {
+                item: item.name || item.sku || 'UNKNOWN ITEM',
+                unit: item.unit || 'UNIT',
+                par: 0,
+                current_inv: currentInv,
+                sales_proj: salesProj,
+                previous_current_inv: currentInv,
+                actual_discrepancy: 0,
+                order_needed: Math.max(0, 0 + salesProj - currentInv),
+            };
+        });
+
+        renderLedgerRows(transformed);
+    } catch (error) {
+        console.error('Inventory load error', error);
+        const statusBox = document.getElementById('upload-status');
+        if (statusBox) {
+            statusBox.textContent = `INVENTORY LOAD FAILED: ${error.message}`;
+            statusBox.className = 'upload-status visible status-error';
+        }
+    }
+}
+
 async function uploadLedger() {
     const fileInput = document.getElementById('ledgerFileInput');
     const statusBox = document.getElementById('upload-status');
@@ -473,26 +516,5 @@ function initDashboardPage() {
         return;
     }
 
-    renderLedgerRows([
-        {
-            item: 'GUTTER GUARD',
-            unit: 'BOX',
-            par: 48,
-            current_inv: 26,
-            sales_proj: 18,
-            previous_current_inv: 32,
-            actual_discrepancy: 4,
-            order_needed: Math.max(0, 48 + 18 - 26)
-        },
-        {
-            item: 'CHICAGO DEEP DISH',
-            unit: 'PIZZA',
-            par: 30,
-            current_inv: 14,
-            sales_proj: 21,
-            previous_current_inv: 18,
-            actual_discrepancy: -5,
-            order_needed: Math.max(0, 30 + 21 - 14)
-        }
-    ]);
+    loadAuthenticatedInventory();
 }

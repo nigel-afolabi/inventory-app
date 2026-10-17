@@ -1,7 +1,7 @@
 import os
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Depends, UploadFile, File
 from fastapi.concurrency import run_in_threadpool
@@ -31,9 +31,14 @@ app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # --- CORS Security Setup ---
+cors_origins = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000").split(",")
+    if origin.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -42,10 +47,16 @@ app.add_middleware(
 security = HTTPBearer(auto_error=False)
 
 # --- Security Setup ---
-SECRET_KEY = os.getenv("SECRET_KEY", "fallback-key-for-dev")
+SECRET_KEY = os.getenv(
+    "SECRET_KEY",
+    "inventory_app_production_secret_key_2026_10_17",
+)
+if len(SECRET_KEY.encode("utf-8")) < 32:
+    raise RuntimeError("SECRET_KEY must be at least 32 characters long for secure JWT signing.")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 480
 MANAGER_SEED_PASSWORD = os.getenv("MANAGER_SEED_PASSWORD", "sample-manager-password-123")
+MANAGER2_SEED_PASSWORD = os.getenv("MANAGER2_SEED_PASSWORD", "sample-manager-password-123")
 ADMIN_SEED_PASSWORD = os.getenv("ADMIN_SEED_PASSWORD", "sample-admin-password-123")
 
 
@@ -74,7 +85,7 @@ def verify_token(credentials: HTTPAuthorizationCredentials | None = Depends(secu
             "sub": "Guest Viewer",
             "location_id": 1,
             "role": "Guest Viewer",
-            "exp": datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+            "exp": datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
         }
 
     try:
@@ -200,7 +211,7 @@ def init_db():
         (default_hash,),
     )
 
-    secondary_hash = get_password_hash(MANAGER_SEED_PASSWORD)
+    secondary_hash = get_password_hash(MANAGER2_SEED_PASSWORD)
     cursor.execute(
         """
         INSERT OR IGNORE INTO users (location_id, username, password_hash, role)
@@ -403,7 +414,7 @@ async def login_user(request: LoginRequest):
     if not verify_password(request.password, db_password_hash):
         raise HTTPException(status_code=401, detail="Incorrect username or password")
 
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     token_payload = {
         "sub": request.username,
         "location_id": db_location_id,
@@ -434,7 +445,7 @@ async def get_inventory(token_payload: dict = Depends(verify_token)):
     if role == "admin":
         cursor.execute(
             """
-            SELECT p.sku, p.name, p.current_stock, COALESCE(SUM(ws.units_sold), 0) / 4.0, p.location_id
+            SELECT p.sku, p.name, p.location_id, p.current_stock, COALESCE(SUM(ws.units_sold), 0) / 4.0
             FROM products p
             LEFT JOIN weekly_sales ws ON p.sku = ws.sku AND p.location_id = ws.location_id
             GROUP BY p.sku, p.location_id
@@ -455,7 +466,7 @@ async def get_inventory(token_payload: dict = Depends(verify_token)):
 
     items = []
     for row in cursor.fetchall():
-        sku, name, current_stock, avg_weekly_sales, item_location_id = row
+        sku, name, item_location_id, current_stock, avg_weekly_sales = row
         wos = round(current_stock / avg_weekly_sales, 1) if avg_weekly_sales > 0 else (0.0 if current_stock == 0 else "N/A")
 
         items.append({
