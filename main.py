@@ -2,6 +2,7 @@ import os
 import json
 import logging
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Depends, UploadFile, File
 from fastapi.concurrency import run_in_threadpool
@@ -30,7 +31,7 @@ logging.basicConfig(
 )
 
 # Load environment variables from .env file
-load_dotenv()
+load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -115,6 +116,15 @@ DEMO_DB_PATH = os.getenv("DEMO_DB_PATH", "demo_inventory.db")
 DEMO_CATALOG_PATH = os.path.join(os.path.dirname(__file__), "demo_catalog.json")
 
 
+def is_serverless_environment() -> bool:
+    return bool(
+        os.getenv("VERCEL") == "1"
+        or os.getenv("VERCEL") == "true"
+        or os.getenv("VERCEL_ENV")
+        or os.getenv("AWS_LAMBDA_FUNCTION_NAME")
+    )
+
+
 def uses_postgres() -> bool:
     if not DATABASE_URL or not DATABASE_URL.strip():
         return False
@@ -128,6 +138,58 @@ def uses_postgres() -> bool:
     return not any(marker in cleaned for marker in placeholder_markers)
 
 
+def get_sql_placeholders(count: int, *, is_pg: bool | None = None) -> str:
+    if is_pg is None:
+        is_pg = uses_postgres()
+    placeholder = "%s" if is_pg else "?"
+    return ", ".join(placeholder for _ in range(count))
+
+
+def get_sql_placeholders_for_connection(conn, count: int) -> str:
+    mod = type(conn).__module__ if conn is not None else ""
+    is_pg = mod.startswith("psycopg")
+    return get_sql_placeholders(count, is_pg=is_pg)
+
+
+def upsert_seed_users(conn, is_pg: bool | None = None):
+    if is_pg is None:
+        is_pg = uses_postgres()
+
+    cursor = conn.cursor()
+    seeded_users = [
+        (1, MANAGER_USERNAME, get_password_hash(MANAGER_SEED_PASSWORD), "manager"),
+        (2, MANAGER2_USERNAME, get_password_hash(MANAGER2_SEED_PASSWORD), "manager"),
+        (None, ADMIN_USERNAME, get_password_hash(ADMIN_SEED_PASSWORD), "admin"),
+    ]
+
+    for location_id, username, password_hash, role in seeded_users:
+        if location_id is None:
+            cursor.execute(
+                f"""
+                INSERT INTO users (username, password_hash, role)
+                VALUES ({get_sql_placeholders(3, is_pg=is_pg)})
+                ON CONFLICT (username) DO UPDATE SET
+                    password_hash = EXCLUDED.password_hash,
+                    role = EXCLUDED.role
+                """,
+                (username, password_hash, role),
+            )
+        else:
+            cursor.execute(
+                f"""
+                INSERT INTO users (location_id, username, password_hash, role)
+                VALUES ({get_sql_placeholders(4, is_pg=is_pg)})
+                ON CONFLICT (username) DO UPDATE SET
+                    location_id = EXCLUDED.location_id,
+                    password_hash = EXCLUDED.password_hash,
+                    role = EXCLUDED.role
+                """,
+                (location_id, username, password_hash, role),
+            )
+
+    conn.commit()
+
+
 # --- Database helpers ---
 def get_connection(db_override: str | None = None):
     if db_override is not None:
@@ -136,6 +198,10 @@ def get_connection(db_override: str | None = None):
         if psycopg2 is None:
             raise RuntimeError("psycopg2 is required when DATABASE_URL is configured.")
         return psycopg2.connect(DATABASE_URL, sslmode="require")
+    if is_serverless_environment():
+        raise RuntimeError(
+            "DATABASE_URL is required for Vercel/serverless deployments. SQLite is read-only here."
+        )
     return sqlite3.connect(db_path)
 
 
@@ -152,6 +218,11 @@ def load_demo_catalog():
 
 # --- Database Initialization (Local Workbench) ---
 def init_db():
+    if not uses_postgres() and is_serverless_environment():
+        raise RuntimeError(
+            "Vercel/serverless deployment requires DATABASE_URL. SQLite writes are not allowed in this environment."
+        )
+
     conn = get_connection()
     cursor = conn.cursor()
     is_pg = uses_postgres()
@@ -305,33 +376,6 @@ def init_db():
             """,
             (LOCATION_1_NAME, LOCATION_2_NAME),
         )
-        default_hash = get_password_hash(MANAGER_SEED_PASSWORD)
-        cursor.execute(
-            """
-            INSERT INTO users (location_id, username, password_hash, role)
-            VALUES (1, %s, %s, 'manager')
-            ON CONFLICT (username) DO NOTHING
-            """,
-            (MANAGER_USERNAME, default_hash),
-        )
-        secondary_hash = get_password_hash(MANAGER2_SEED_PASSWORD)
-        cursor.execute(
-            """
-            INSERT INTO users (location_id, username, password_hash, role)
-            VALUES (2, %s, %s, 'manager')
-            ON CONFLICT (username) DO NOTHING
-            """,
-            (MANAGER2_USERNAME, secondary_hash),
-        )
-        admin_hash = get_password_hash(ADMIN_SEED_PASSWORD)
-        cursor.execute(
-            """
-            INSERT INTO users (username, password_hash, role)
-            VALUES (%s, %s, 'admin')
-            ON CONFLICT (username) DO NOTHING
-            """,
-            (ADMIN_USERNAME, admin_hash),
-        )
         cursor.execute(
             """
             INSERT INTO products (sku, location_id, name, current_stock)
@@ -352,33 +396,6 @@ def init_db():
             (LOCATION_1_NAME, LOCATION_2_NAME),
         )
 
-        default_hash = get_password_hash(MANAGER_SEED_PASSWORD)
-        cursor.execute(
-            """
-            INSERT OR IGNORE INTO users (location_id, username, password_hash, role)
-            VALUES (1, ?, ?, 'manager')
-            """,
-            (MANAGER_USERNAME, default_hash,),
-        )
-
-        secondary_hash = get_password_hash(MANAGER2_SEED_PASSWORD)
-        cursor.execute(
-            """
-            INSERT OR IGNORE INTO users (location_id, username, password_hash, role)
-            VALUES (2, ?, ?, 'manager')
-            """,
-            (MANAGER2_USERNAME, secondary_hash,),
-        )
-
-        admin_hash = get_password_hash(ADMIN_SEED_PASSWORD)
-        cursor.execute(
-            """
-            INSERT OR IGNORE INTO users (username, password_hash, role)
-            VALUES (?, ?, 'admin')
-            """,
-            (ADMIN_USERNAME, admin_hash,),
-        )
-
         cursor.execute(
             """
             INSERT OR IGNORE INTO products (sku, location_id, name, current_stock)
@@ -389,6 +406,8 @@ def init_db():
             ('SKU-201', 2, 'Premium Lettuce Pack', 22)
             """
         )
+
+    upsert_seed_users(conn, is_pg=is_pg)
 
     conn.commit()
     conn.close()
@@ -433,11 +452,12 @@ def _get_previous_ledger_map(location_id: int | None, db_override: str | None = 
 
     conn = get_connection(db_override)
     cursor = conn.cursor()
+    placeholder = get_sql_placeholders_for_connection(conn, 1)
     cursor.execute(
-        """
+        f"""
         SELECT item, current_inv, sales_proj, unit, par, order_needed, previous_current_inv, expected_ending_inv, actual_discrepancy, audit_flag
         FROM ledger_snapshots
-        WHERE location_id = ?
+        WHERE location_id = {placeholder}
         ORDER BY uploaded_at DESC, id DESC
         """,
         (location_id,),
@@ -526,8 +546,9 @@ def _persist_ledger_rows(location_id: int | None, ledger_rows: list[dict], db_ov
             "adjusted_order": reconciliation["adjusted_order"],
         })
 
+        placeholder = get_sql_placeholders_for_connection(conn, 13)
         cursor.execute(
-            """
+            f"""
             INSERT INTO ledger_snapshots (
                 location_id,
                 item,
@@ -542,7 +563,7 @@ def _persist_ledger_rows(location_id: int | None, ledger_rows: list[dict], db_ov
                 received_shipments,
                 audit_flag,
                 audit_message
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES ({placeholder})
             """,
             (
                 location_id,
@@ -580,8 +601,9 @@ async def login_user(request: LoginRequest):
     conn = get_connection()
     cursor = conn.cursor()
 
+    placeholder = get_sql_placeholders_for_connection(conn, 1)
     cursor.execute(
-        "SELECT password_hash, location_id, role FROM users WHERE username = ?",
+        f"SELECT password_hash, location_id, role FROM users WHERE username = {placeholder}",
         (request.username,),
     )
     user = cursor.fetchone()
@@ -634,12 +656,13 @@ async def get_inventory(token_payload: dict = Depends(verify_token)):
             """
         )
     else:
+        placeholder = get_sql_placeholders_for_connection(conn, 1)
         cursor.execute(
-            """
+            f"""
             SELECT p.sku, p.name, p.location_id, p.current_stock, COALESCE(SUM(ws.units_sold), 0) / 4.0
             FROM products p
             LEFT JOIN weekly_sales ws ON p.sku = ws.sku AND p.location_id = ws.location_id
-            WHERE p.location_id = ?
+            WHERE p.location_id = {placeholder}
             GROUP BY p.sku, p.location_id
             """,
             (location_id,),
