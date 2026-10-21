@@ -165,6 +165,18 @@ h1, h2, p {
     color: var(--muted);
 }
 
+.auth-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 4px;
+}
+
+.auth-demo {
+    border-color: rgba(148, 163, 184, 0.7);
+    color: var(--muted);
+}
+
 .error-box,
 .upload-status {
     display: none;

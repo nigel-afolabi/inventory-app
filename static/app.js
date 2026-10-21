@@ -55,9 +55,19 @@ function initHelpModal() {
 function initLoginPage() {
     const loginForm = document.getElementById('loginForm');
     const errorBox = document.getElementById('error-msg');
+    const demoButton = document.querySelector('[data-demo-login]');
 
     if (!loginForm) {
         return;
+    }
+
+    if (demoButton) {
+        demoButton.addEventListener('click', () => {
+            localStorage.removeItem('inventory_token');
+            localStorage.removeItem('location_id');
+            localStorage.removeItem('role');
+            window.location.href = '/dashboard';
+        });
     }
 
     loginForm.addEventListener('submit', async (event) => {

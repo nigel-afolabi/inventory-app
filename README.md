@@ -52,12 +52,13 @@ Important:
    ```text
    http://localhost:8000/
    ```
+5. For guest access, use the `VIEW DEMO` button on the login page. It opens the public dashboard in read-only preview mode without requiring a manager login.
 
 ## Login and access model
 - `manager` can only see and manage Location 1 records.
 - `manager2` can only see and manage Location 2 records.
 - `admin` can view both locations in the main inventory view.
-- Guest user can view the demo catalog and upload sample files to a separate demo database without affecting the live store inventory.
+- Guest users should click `VIEW DEMO` from the login page to browse the demo catalog and preview read-only inventory/test data without affecting the live store database.
 
 ## Data isolation rules
 The app stores each ledger snapshot and related record with a `location_id`. This prevents overlap between branches and keeps a manager from viewing another branch’s ledger during a later login.

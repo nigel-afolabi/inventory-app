@@ -72,6 +72,13 @@ def test_dashboard_uses_live_inventory_api_for_logged_in_users():
     assert "renderLedgerRows([" not in app_js
 
 
+def test_login_page_exposes_guest_demo_button():
+    response = client.get("/")
+    assert response.status_code == 200
+    html = response.text
+    assert "VIEW DEMO" in html or "Guest Demo" in html
+
+
 def test_guest_demo_upload_is_functional_without_touching_live_db():
     csv_body = (
         "ITEM,SKU,UNIT,PAR,CURRENT INV,SALES PROJ,ORDER NEEDED\n"
