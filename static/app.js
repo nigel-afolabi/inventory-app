@@ -464,13 +464,6 @@ async function uploadLedger() {
 }
 
 function initDashboardPage() {
-    const token = localStorage.getItem('inventory_token');
-
-    if (!token) {
-        window.location.href = '/';
-        return;
-    }
-
     window.logout = function logout() {
         localStorage.removeItem('inventory_token');
         localStorage.removeItem('location_id');
