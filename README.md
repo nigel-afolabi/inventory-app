@@ -1,6 +1,8 @@
 # Inventory Management System
 
-This project is a local-first retail inventory application for a real store deployment. It stores data in SQLite, keeps location data isolated, encrypts stored passwords with bcrypt, and supports CSV/XLSX ledger uploads for daily operational reconciliation.
+https://inventory-app-xbz2.onrender.com/
+
+This project is a local-first retail inventory application for a real store deployment. It stores data in PostgreSQL, keeps location data isolated, encrypts stored passwords with bcrypt, and supports CSV/XLSX ledger uploads for daily operational reconciliation.
 
 ## What is included
 - Secure login with manager/admin roles
